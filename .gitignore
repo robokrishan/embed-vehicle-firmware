@@ -1,0 +1,14 @@
+.idea
+build/
+venv/
+managed_components/
+
+.vscode/settings.json
+sdkconfig.old
+dependencies.lock
+
+*.gcda
+*.gcno
+*.pyc
+*.log
+*.spec
