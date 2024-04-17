@@ -16,6 +16,7 @@
 #include "ultrasonic.h"
 #include "string.h"
 #include "bumper.h"
+#include "esp_err.h"
 
 static const char* TAG = "app_main";
 
