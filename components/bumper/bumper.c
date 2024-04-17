@@ -63,7 +63,7 @@ static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
                                             configMINIMAL_STACK_SIZE * 3, 
                                             &pBumper->sMid, 
                                             5, 
-                                            pBumper->sMid.pHandle, 
+                                            &pBumper->sMid.pHandle, 
                                             1)) {
         ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sMid.szName);
         goto end_create_task;
@@ -74,7 +74,7 @@ static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
                                             configMINIMAL_STACK_SIZE * 3, 
                                             &pBumper->sLeft, 
                                             5, 
-                                            pBumper->sLeft.pHandle, 
+                                            &pBumper->sLeft.pHandle, 
                                             1)) {
         ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sLeft.szName);
         goto end_create_task;
@@ -85,7 +85,7 @@ static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
                                             configMINIMAL_STACK_SIZE * 3, 
                                             &pBumper->sRight, 
                                             5, 
-                                            pBumper->sRight.pHandle, 
+                                            &pBumper->sRight.pHandle, 
                                             1)) {
         ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sRight.szName);
         goto end_create_task;
