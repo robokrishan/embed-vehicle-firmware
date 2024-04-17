@@ -98,7 +98,7 @@ end_create_task:
     return lErr;
 }
 
-static esp_err_t s_configureModules(Bumper_t* pBumper, char* szName) {
+static esp_err_t s_configureModules(Bumper_t* pBumper) {
     pBumper->sLeft.sSensor.echo_pin = CONFIG_PIN_SENSOR_LEFT_ECHO;
     pBumper->sLeft.sSensor.trigger_pin = CONFIG_PIN_SENSOR_LEFT_TRIGGER;
     strcpy(pBumper->sLeft.szName, "left");
@@ -110,6 +110,8 @@ static esp_err_t s_configureModules(Bumper_t* pBumper, char* szName) {
     pBumper->sRight.sSensor.echo_pin = CONFIG_PIN_SENSOR_RIGHT_ECHO;
     pBumper->sRight.sSensor.trigger_pin = CONFIG_PIN_SENSOR_RIGHT_TRIGGER;
     strcpy(pBumper->sMid.szName, "right");
+
+    return ESP_OK;
 }
 
 esp_err_t bumperInit(void) {
