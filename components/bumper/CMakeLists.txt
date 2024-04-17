@@ -1,3 +1,3 @@
 idf_component_register(SRCS "bumper.c"
                     INCLUDE_DIRS "."
-                    REQUIRES ultrasonic)
+                    REQUIRES ultrasonic device_config)
