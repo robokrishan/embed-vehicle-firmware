@@ -23,65 +23,70 @@ static void s_bumperTask(void* pArg) {
             printf("Error %d: ", lErr);
             switch (lErr)
             {
-                case ESP_ERR_ULTRASONIC_PING:
-                    // printf("Cannot ping (device is in invalid state)\n");
-                    printf("-1\n");
+                case ESP_ERR_ULTRASONIC_PING: {
+                    ESP_LOGE(TAG, "Cannot ping (device is in invalid state)");
+                    pModule->ubDistance = 0;
                     break;
-                case ESP_ERR_ULTRASONIC_PING_TIMEOUT:
-                    // printf("Ping timeout (no device found)\n");
-                    printf("-2\n");
+                }
+
+                case ESP_ERR_ULTRASONIC_PING_TIMEOUT: {
+                    ESP_LOGE(TAG, "Ping timeout (no device found)");
+                    pModule->ubDistance = 0;
                     break;
-                case ESP_ERR_ULTRASONIC_ECHO_TIMEOUT:
-                    // printf("Echo timeout (i.e. distance too big)\n");
-                    printf("-3\n");
+                }
+
+                case ESP_ERR_ULTRASONIC_ECHO_TIMEOUT: {
+                    ESP_LOGE(TAG, "Echo timeout (no device found)");
+                    pModule->ubDistance = 0;
                     break;
-                default:
+                }
+
+                default: {
+                    ESP_LOGE(TAG, "")
                     printf("%s\n", esp_err_to_name(lErr));
+                }
             }
         }
         else {
             pModule->ubDistance = (uint8_t)(fDistance*100);
-            // printf("Distance: %d cm\n", distance_cm);
-            // printf("%d\n", pModule->ubDistance);
         }
-
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
-static esp_err_t s_createBumperTask(Bumper_t* pBumper) {
+static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
     esp_err_t lErr = ESP_FAIL;
 
     if(pdPASS != xTaskCreatePinnedToCore(s_bumperTask, 
-                                            "mid", 
+                                            pBumper->sMid.szName, 
                                             configMINIMAL_STACK_SIZE * 3, 
                                             &pBumper->sMid, 
                                             5, 
                                             pBumper->sMid.pHandle, 
                                             1)) {
-        ESP_LOGE(TAG, "Failed to start mid sensor! Aborting...");
+        ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sMid.szName);
         goto end_create_task;
     }
 
     if(pdPASS != xTaskCreatePinnedToCore(s_bumperTask, 
-                                            "left", 
+                                            pBumper->sLeft.szName, 
                                             configMINIMAL_STACK_SIZE * 3, 
                                             &pBumper->sLeft, 
                                             5, 
                                             pBumper->sLeft.pHandle, 
                                             1)) {
-        ESP_LOGE(TAG, "Failed to start left sensor! Aborting...");
+        ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sLeft.szName);
         goto end_create_task;
     }
 
     if(pdPASS != xTaskCreatePinnedToCore(s_bumperTask, 
-                                            "right", 
+                                            pBumper->sRight.szName, 
                                             configMINIMAL_STACK_SIZE * 3, 
                                             &pBumper->sRight, 
                                             5, 
                                             pBumper->sRight.pHandle, 
                                             1)) {
-        ESP_LOGE(TAG, "Failed to start right sensor! Aborting...");
+        ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sRight.szName);
         goto end_create_task;
     }
 
@@ -92,20 +97,36 @@ end_create_task:
     return lErr;
 }
 
+static esp_err_t s_configureModules(Bumper_t* pBumper, char* szName) {
+    pBumper->sLeft.sSensor.echo_pin = CONFIG_PIN_SENSOR_LEFT_ECHO;
+    pBumper->sLeft.sSensor.trigger_pin = CONFIG_PIN_SENSOR_LEFT_TRIGGER;
+    strcpy(pBumper->sLeft.szName, "left");
+
+    pBumper->sMid.sSensor.echo_pin = CONFIG_PIN_SENSOR_FRONT_ECHO;
+    pBumper->sMid.sSensor.trigger_pin = CONFIG_PIN_SENSOR_FRONT_TRIGGER;
+    strcpy(pBumper->sMid.szName, "mid");
+
+    pBumper->sRight.sSensor.echo_pin = CONFIG_PIN_SENSOR_RIGHT_ECHO;
+    pBumper->sRight.sSensor.trigger_pin = CONFIG_PIN_SENSOR_RIGHT_TRIGGER;
+    strcpy(pBumper->sMid.szName, "right");
+}
+
 esp_err_t bumperInit(void) {
-    esp_err_t lErr = ESP_OK;
-    s_sBumper.sLeft.sSensor.echo_pin = CONFIG_PIN_SENSOR_LEFT_ECHO;
-    s_sBumper.sLeft.sSensor.trigger_pin = CONFIG_PIN_SENSOR_LEFT_TRIGGER;
-    strcpy(s_sBumper.sLeft.szName, "left");
+    esp_err_t lErr = ESP_FAIL;
+    
+    lErr = s_configureModules(&s_sBumper);
+    if(lErr) {
+        ESP_LOGE(TAG, "Failed to configure sensor modules! Code: 0x%X", lErr);
+        goto abort_init;
+    }
 
-    s_sBumper.sMid.sSensor.echo_pin = CONFIG_PIN_SENSOR_FRONT_ECHO;
-    s_sBumper.sMid.sSensor.trigger_pin = CONFIG_PIN_SENSOR_FRONT_TRIGGER;
-    strcpy(s_sBumper.sMid.szName, "left");
+    lErr = s_createBumperTasks(&s_sBumper);
+    if(lErr) {
+        goto abort_init;
+    }
 
-    s_sBumper.sRight.sSensor.echo_pin = CONFIG_PIN_SENSOR_RIGHT_ECHO;
-    s_sBumper.sRight.sSensor.trigger_pin = CONFIG_PIN_SENSOR_RIGHT_TRIGGER;
-    strcpy(s_sBumper.sMid.szName, "left");
+    lErr = ESP_OK;
+abort_init:
 
-
-    return s_createBumperTask(&s_sBumper);
+    return lErr;
 }
