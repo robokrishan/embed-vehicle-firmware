@@ -17,6 +17,7 @@
 #include "string.h"
 #include "bumper.h"
 #include "esp_err.h"
+#include "communication.h"
 
 static const char* TAG = "app_main";
 
@@ -37,11 +38,18 @@ void app_main(void)
 
     esp_err_t lErr = ESP_OK;
 
-    lErr = bumperInit();
+    // lErr = bumperInit();
+    // if(lErr) {
+    //     ESP_LOGE(TAG, "Failed to initialize bumper. Code: 0x%X", lErr);
+    // } else {
+    //     ESP_LOGI(TAG, "Bumper initialized!");
+    // }
+
+    lErr = communicationInit();
     if(lErr) {
-        ESP_LOGE(TAG, "Failed to initialize bumper. Code: 0x%X", lErr);
+        ESP_LOGE(TAG, "Failed to initialize UART communication. Code: 0x%X", lErr);
     } else {
-        ESP_LOGI(TAG, "Bumper initialized!");
+        ESP_LOGI(TAG, "UART peripheral initialized!");
     }
     
 }
