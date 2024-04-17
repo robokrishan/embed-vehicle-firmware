@@ -3,6 +3,7 @@
 #include "device_config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "string.h"
 
 static const char* TAG = "bumper";
 

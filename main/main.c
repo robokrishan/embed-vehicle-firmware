@@ -15,6 +15,7 @@
 #include "nvs_storage.h"
 #include "ultrasonic.h"
 #include "string.h"
+#include "bumper.h"
 
 static const char* TAG = "app_main";
 
