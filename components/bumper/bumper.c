@@ -96,11 +96,15 @@ esp_err_t bumperInit(void) {
     esp_err_t lErr = ESP_OK;
     s_sBumper.sLeft.sSensor.echo_pin = CONFIG_PIN_SENSOR_LEFT_ECHO;
     s_sBumper.sLeft.sSensor.trigger_pin = CONFIG_PIN_SENSOR_LEFT_TRIGGER;
+    strcpy(s_sBumper.sLeft.szName, "left");
+
     s_sBumper.sMid.sSensor.echo_pin = CONFIG_PIN_SENSOR_FRONT_ECHO;
     s_sBumper.sMid.sSensor.trigger_pin = CONFIG_PIN_SENSOR_FRONT_TRIGGER;
+    strcpy(s_sBumper.sMid.szName, "left");
+
     s_sBumper.sRight.sSensor.echo_pin = CONFIG_PIN_SENSOR_RIGHT_ECHO;
     s_sBumper.sRight.sSensor.trigger_pin = CONFIG_PIN_SENSOR_RIGHT_TRIGGER;
-
+    strcpy(s_sBumper.sMid.szName, "left");
 
 
     return s_createBumperTask(&s_sBumper);

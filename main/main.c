@@ -21,7 +21,7 @@ static const char* TAG = "app_main";
 
 
 
-static uint8_t distance_cm = 0;
+
 
 
 
