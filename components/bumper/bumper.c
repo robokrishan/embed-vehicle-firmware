@@ -43,8 +43,7 @@ static void s_bumperTask(void* pArg) {
                 }
 
                 default: {
-                    ESP_LOGE(TAG, "")
-                    printf("%s\n", esp_err_to_name(lErr));
+                    ESP_LOGE(TAG, "Sensor error! Code: 0x%X", lErr);
                 }
             }
         }
