@@ -5,11 +5,47 @@
 #include "freertos/task.h"
 #include "string.h"
 #include "esp_log.h"
+#include "communication.h"
 
 static const char* TAG = "bumper";
 
 static Bumper_t s_sBumper;
+static uint8_t* pData;
+static uint32_t s_ulHeader = COMM_PACKET_HEADER;
+static uint16_t s_ulTerminator = COMM_PACKET_TERMINATOR;
 
+static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
+    esp_err_t lErr = ESP_OK;
+    
+    int lIterator = 0;
+
+    // Serialize header
+    memcpy(&pData[lIterator], &s_ulHeader, sizeof(s_ulHeader));
+    lIterator += sizeof(s_ulHeader);
+
+    // serialize sensor values
+    memcpy(&pData[lIterator], &s_sBumper.sLeft.ubDistance, sizeof(uint8_t));
+    lIterator += sizeof(uint8_t);
+    memcpy(&pData[lIterator], &s_sBumper.sMid.ubDistance, sizeof(uint8_t));
+    lIterator += sizeof(uint8_t);
+    memcpy(&pData[lIterator], &s_sBumper.sRight.ubDistance, sizeof(uint8_t));
+    lIterator += sizeof(uint8_t);
+
+    // serialize terminator
+    memcpy(&pData[lIterator], &s_ulTerminator, sizeof(s_ulTerminator));
+    lIterator += sizeof(s_ulTerminator);
+
+    return communicationWrite(pData, lIterator);
+}
+
+static void s_communicationTask(void* pArg) {
+    ESP_LOGI(TAG, "Starting communication task...");
+
+    while(1) {
+        s_sendBumperPacket(&s_sBumper);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
+    }
+}
 
 static void s_bumperTask(void* pArg) {
     SensorModule_t* pModule;
@@ -125,6 +161,25 @@ esp_err_t bumperInit(void) {
 
     lErr = s_createBumperTasks(&s_sBumper);
     if(lErr) {
+        goto abort_init;
+    }
+
+    if(pdPASS != xTaskCreatePinnedToCore(s_communicationTask,
+                                            "tx_loop",
+                                            configMINIMAL_STACK_SIZE*2,
+                                            NULL,
+                                            3,
+                                            NULL,
+                                            0)) {
+        ESP_LOGE(TAG, "Failed to start communication task!");
+        lErr = ESP_FAIL;
+        goto abort_init;
+    }
+
+    pData = (uint8_t*)malloc((sizeof(uint8_t)*3)+sizeof(s_ulHeader)+sizeof(s_ulTerminator));
+    if(NULL == pData) {
+        INNE_LOGE(TAG, "Failed to allocate memory for Tx buffer!");
+        lErr = ESP_ERR_NO_MEM;
         goto abort_init;
     }
 
