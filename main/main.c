@@ -38,18 +38,18 @@ void app_main(void)
 
     esp_err_t lErr = ESP_OK;
 
-    // lErr = bumperInit();
-    // if(lErr) {
-    //     ESP_LOGE(TAG, "Failed to initialize bumper. Code: 0x%X", lErr);
-    // } else {
-    //     ESP_LOGI(TAG, "Bumper initialized!");
-    // }
-
-    lErr = communicationInit();
+     lErr = communicationInit();
     if(lErr) {
         ESP_LOGE(TAG, "Failed to initialize UART communication. Code: 0x%X", lErr);
     } else {
         ESP_LOGI(TAG, "UART peripheral initialized!");
+    }
+
+    lErr = bumperInit();
+    if(lErr) {
+        ESP_LOGE(TAG, "Failed to initialize bumper. Code: 0x%X", lErr);
+    } else {
+        ESP_LOGI(TAG, "Bumper initialized!");
     }
     
 }
