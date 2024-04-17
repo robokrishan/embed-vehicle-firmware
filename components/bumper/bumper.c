@@ -15,8 +15,6 @@ static uint32_t s_ulHeader = COMM_PACKET_HEADER;
 static uint16_t s_ulTerminator = COMM_PACKET_TERMINATOR;
 
 static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
-    esp_err_t lErr = ESP_OK;
-    
     int lIterator = 0;
 
     // Serialize header
@@ -178,7 +176,7 @@ esp_err_t bumperInit(void) {
 
     pData = (uint8_t*)malloc((sizeof(uint8_t)*3)+sizeof(s_ulHeader)+sizeof(s_ulTerminator));
     if(NULL == pData) {
-        INNE_LOGE(TAG, "Failed to allocate memory for Tx buffer!");
+        ESP_LOGE(TAG, "Failed to allocate memory for Tx buffer!");
         lErr = ESP_ERR_NO_MEM;
         goto abort_init;
     }
