@@ -5,11 +5,8 @@
 #include "device_config.h"
 #include "esp_log.h"
 
-#define BUFFER_SIZE         1024
 
 static const char* TAG = "communication";
-
-static uint8_t* pData = NULL;
 
 
 esp_err_t communicationWrite(uint8_t* pData, size_t ulLen) {
@@ -44,13 +41,6 @@ esp_err_t communicationInit(void) {
     lErr = uart_set_pin(UART_NUM_1, CONFIG_PIN_UART_TX1, CONFIG_PIN_UART_RX1, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     if(lErr) {
         ESP_LOGE(TAG, "Failed to configure UART pins! Code: 0x%X", lErr);
-        goto abort_init;
-    }
-
-    pData = (uint8_t*)malloc(sizeof(uint8_t)*BUFFER_SIZE);
-    if(NULL == pData) {
-        ESP_LOGE(TAG, "Failed to allocate memory for UART buffer!");
-        lErr = ESP_ERR_NO_MEM;
         goto abort_init;
     }
 
