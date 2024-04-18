@@ -14,34 +14,55 @@ static uint8_t* pData;
 static uint32_t s_ulHeader = COMM_PACKET_HEADER;
 static uint16_t s_ulTerminator = COMM_PACKET_TERMINATOR;
 
+static uint8_t* s_intToBytes(uint32_t* pValue)
+{
+    return (uint8_t*) pValue;
+}
+
+static uint8_t* s_intToBytesShort(uint16_t* pValue)
+{
+    return (uint8_t*) pValue;
+}
+
 static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
     int lIterator = 0;
 
-    // Serialize header
-    memcpy(&pData[lIterator], &s_ulHeader, sizeof(s_ulHeader));
-    lIterator += sizeof(s_ulHeader);
+    if(NULL != pData) {
+        // Serialize header
+        memcpy(&pData[lIterator], s_intToBytes(&s_ulHeader), sizeof(uint32_t));
+        lIterator += sizeof(uint32_t);
 
-    // serialize sensor values
-    memcpy(&pData[lIterator], &s_sBumper.sLeft.ubDistance, sizeof(uint8_t));
-    lIterator += sizeof(uint8_t);
-    memcpy(&pData[lIterator], &s_sBumper.sMid.ubDistance, sizeof(uint8_t));
-    lIterator += sizeof(uint8_t);
-    memcpy(&pData[lIterator], &s_sBumper.sRight.ubDistance, sizeof(uint8_t));
-    lIterator += sizeof(uint8_t);
+        // serialize sensor values
+        memcpy(&pData[lIterator], &s_sBumper.sLeft.ubDistance, sizeof(uint8_t));
+        lIterator += sizeof(uint8_t);
+        memcpy(&pData[lIterator], &s_sBumper.sMid.ubDistance, sizeof(uint8_t));
+        lIterator += sizeof(uint8_t);
+        memcpy(&pData[lIterator], &s_sBumper.sRight.ubDistance, sizeof(uint8_t));
+        lIterator += sizeof(uint8_t);
 
-    // serialize terminator
-    memcpy(&pData[lIterator], &s_ulTerminator, sizeof(s_ulTerminator));
-    lIterator += sizeof(s_ulTerminator);
+        // serialize terminator
+        memcpy(&pData[lIterator], s_intToBytesShort(&s_ulTerminator), sizeof(uint16_t));
+        lIterator += sizeof(uint16_t);
 
-    return communicationWrite(pData, lIterator);
+#ifdef DEBUG
+        ESP_LOGI(TAG, "Packed %d bytes into buffer!", lIterator);
+        printf("Buffer:\n");
+        for(int i = 0; i < lIterator+1; i++) {
+            printf("%X | %d\n", pData[i], pData[i]);
+        }
+#endif
+
+        return communicationWrite(pData, lIterator);
+    }
+    return ESP_FAIL;
 }
 
 static void s_communicationTask(void* pArg) {
-    ESP_LOGI(TAG, "Starting communication task...");
+    ESP_LOGI(TAG, "Started communication task");
 
     while(1) {
         s_sendBumperPacket(&s_sBumper);
-        vTaskDelay(200 / portTICK_PERIOD_MS);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 }
 
@@ -49,9 +70,15 @@ static void s_bumperTask(void* pArg) {
     SensorModule_t* pModule;
     pModule = pArg;
 
-    ultrasonic_init(&pModule->sSensor);
+    bool isLoop = true;
 
-    while (true)
+    esp_err_t lErr = ultrasonic_init(&pModule->sSensor);
+    if(lErr) {
+        ESP_LOGE(TAG, "Failed to initialize ultrasonic sensor! Aborting...");
+        isLoop = false;
+    }
+
+    while (isLoop)
     {
         float fDistance;
         esp_err_t lErr = ultrasonic_measure(&pModule->sSensor, CONFIG_MAX_DISTANCE_CM, &fDistance);
@@ -84,8 +111,13 @@ static void s_bumperTask(void* pArg) {
         }
         else {
             pModule->ubDistance = (uint8_t)(fDistance*100);
+            printf("[%s] Distance:\t%d\n", pModule->szName, pModule->ubDistance);
+
+#ifdef DEBUG
+            ESP_LOGW(TAG, "%f", fDistance*100);
+#endif
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 }
 
@@ -125,6 +157,7 @@ static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
         goto end_create_task;
     }
 
+    ESP_LOGI(TAG, "Initialized bumper sensor array");
     lErr = ESP_OK;
 
 end_create_task:
@@ -143,7 +176,7 @@ static esp_err_t s_configureModules(Bumper_t* pBumper) {
 
     pBumper->sRight.sSensor.echo_pin = CONFIG_PIN_SENSOR_RIGHT_ECHO;
     pBumper->sRight.sSensor.trigger_pin = CONFIG_PIN_SENSOR_RIGHT_TRIGGER;
-    strcpy(pBumper->sMid.szName, "right");
+    strcpy(pBumper->sRight.szName, "right");
 
     return ESP_OK;
 }
@@ -162,9 +195,11 @@ esp_err_t bumperInit(void) {
         goto abort_init;
     }
 
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+
     if(pdPASS != xTaskCreatePinnedToCore(s_communicationTask,
                                             "tx_loop",
-                                            configMINIMAL_STACK_SIZE*2,
+                                            configMINIMAL_STACK_SIZE*5,
                                             NULL,
                                             3,
                                             NULL,
