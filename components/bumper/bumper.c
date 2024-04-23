@@ -7,17 +7,28 @@
 #include "esp_log.h"
 #include "communication.h"
 #include "freertos/event_groups.h"
+#include "freertos/semphr.h"
+
+
+static const char* TAG = "bumper";
+
+// Communication syncrhonization - Event Group Config
 
 #define BIT_SENSOR_LEFT     BIT0
 #define BIT_SENSOR_MID      BIT1
 #define BIT_SENSOR_RIGHT    BIT2
 
-static const char* TAG = "bumper";
-
 static EventGroupHandle_t s_pEventGroup = NULL;
 static StaticEventGroup_t s_sEventGroupBuffer;
 static TickType_t s_ulCondition = BIT_SENSOR_LEFT | BIT_SENSOR_MID | BIT_SENSOR_RIGHT;
 
+
+// Shared resource access control
+static SemaphoreHandle_t s_sMutexBumper = NULL;
+static StaticSemaphore_t s_sMutexBumperBuffer;
+
+
+// Static vars
 static Bumper_t s_sBumper;
 static uint8_t* pData;
 static uint32_t s_ulHeader = COMM_PACKET_HEADER;
@@ -33,8 +44,18 @@ static uint8_t* s_intToBytesShort(uint16_t* pValue)
     return (uint8_t*) pValue;
 }
 
+static void s_printBumperPacket(void) {
+    printf("[%s]\tDistance:\t%d\n", s_sBumper.sLeft.szName, s_sBumper.sLeft.ubDistance);
+    printf("[%s]\tDistance:\t%d\n", s_sBumper.sMid.szName, s_sBumper.sMid.ubDistance);
+    printf("[%s]\tDistance:\t%d\n", s_sBumper.sRight.szName, s_sBumper.sRight.ubDistance);
+    printf("=====================================\n");
+}
+
 static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
     int lIterator = 0;
+
+    // Access Tx buffer
+    xSemaphoreTake(s_sMutexBumper, portMAX_DELAY);
 
     if(NULL != pData) {
         // Serialize header
@@ -49,6 +70,9 @@ static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
         memcpy(&pData[lIterator], &s_sBumper.sRight.ubDistance, sizeof(uint8_t));
         lIterator += sizeof(uint8_t);
 
+        // Return bumper
+        xSemaphoreGive(s_sMutexBumper);
+
         // serialize terminator
         memcpy(&pData[lIterator], s_intToBytesShort(&s_ulTerminator), sizeof(uint16_t));
         lIterator += sizeof(uint16_t);
@@ -60,10 +84,12 @@ static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
             printf("%X | %d\n", pData[i], pData[i]);
         }
 #endif
-
+        xSemaphoreGive(s_sMutexBumper);
         return communicationWrite(pData, lIterator);
     }
-    return ESP_FAIL;
+
+    xSemaphoreGive(s_sMutexBumper);
+    return ESP_ERR_TIMEOUT;
 }
 
 static void s_communicationTask(void* pArg) {
@@ -74,6 +100,7 @@ static void s_communicationTask(void* pArg) {
         bits = xEventGroupWaitBits(s_pEventGroup, s_ulCondition, pdTRUE, pdTRUE, portMAX_DELAY);
         if ((bits & s_ulCondition) == s_ulCondition) {
             s_sendBumperPacket(&s_sBumper);
+            s_printBumperPacket();
             xEventGroupClearBits(s_pEventGroup, s_ulCondition);
         } else {
             ESP_LOGW(TAG, "Timed out waiting for condition! %ld != %ld", bits, s_ulCondition);
@@ -99,25 +126,23 @@ static void s_bumperTask(void* pArg) {
     {
         float fDistance;
         esp_err_t lErr = ultrasonic_measure(&pModule->sSensor, CONFIG_MAX_DISTANCE_CM, &fDistance);
+ 
         if (lErr != ESP_OK) {
             printf("Error %d: ", lErr);
             switch (lErr)
             {
                 case ESP_ERR_ULTRASONIC_PING: {
                     ESP_LOGE(TAG, "Cannot ping (device is in invalid state)");
-                    pModule->ubDistance = 0;
                     break;
                 }
 
                 case ESP_ERR_ULTRASONIC_PING_TIMEOUT: {
                     ESP_LOGE(TAG, "Ping timeout (no device found)");
-                    pModule->ubDistance = 0;
                     break;
                 }
 
                 case ESP_ERR_ULTRASONIC_ECHO_TIMEOUT: {
                     ESP_LOGE(TAG, "Echo timeout (no device found)");
-                    pModule->ubDistance = 0;
                     break;
                 }
 
@@ -127,14 +152,26 @@ static void s_bumperTask(void* pArg) {
             }
         }
         else {
+            // Record value
             pModule->ubDistance = (uint8_t)(fDistance*100);
-            printf("[%s]\tDistance:\t%d\n", pModule->szName, pModule->ubDistance);
+
+            // Set respective bit
+            EventBits_t sBits;
+            if(!strcmp(pModule->szName, "left")) {
+                sBits = BIT_SENSOR_LEFT;
+            } else if(!strcmp(pModule->szName, "mid")) {
+                sBits = BIT_SENSOR_MID;
+            } else {
+                sBits = BIT_SENSOR_RIGHT;
+            }
+
+            xEventGroupSetBits(s_pEventGroup, sBits);
 
 #ifdef DEBUG
             ESP_LOGW(TAG, "%f", fDistance*100);
 #endif
         }
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
@@ -150,8 +187,6 @@ static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
                                             1)) {
         ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sMid.szName);
         goto end_create_task;
-    } else {
-        xEventGroupSetBits(s_pEventGroup, BIT_SENSOR_MID);
     }
 
     if(pdPASS != xTaskCreatePinnedToCore(s_bumperTask, 
@@ -163,8 +198,6 @@ static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
                                             1)) {
         ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sLeft.szName);
         goto end_create_task;
-    } else {
-        xEventGroupSetBits(s_pEventGroup, BIT_SENSOR_LEFT);
     }
 
     if(pdPASS != xTaskCreatePinnedToCore(s_bumperTask, 
@@ -176,9 +209,10 @@ static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
                                             1)) {
         ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sRight.szName);
         goto end_create_task;
-    } else {
-        xEventGroupSetBits(s_pEventGroup, BIT_SENSOR_RIGHT);
     }
+
+    // Set all sensor bits
+    xEventGroupSetBits(s_pEventGroup, s_ulCondition);
 
     ESP_LOGI(TAG, "Initialized bumper sensor array");
     lErr = ESP_OK;
@@ -204,8 +238,22 @@ static esp_err_t s_configureModules(Bumper_t* pBumper) {
     return ESP_OK;
 }
 
+static void s_startCountdown(uint8_t ulTimeSeconds) {
+    ESP_LOGI(TAG, "Starting in");
+    for(int i = 0; i < ulTimeSeconds; i++) {
+        vTaskDelay(ulTimeSeconds*200 / portTICK_PERIOD_MS);
+        ESP_LOGI(TAG, "%d", ulTimeSeconds-(i+1));
+    }
+}
+
 esp_err_t bumperInit(void) {
     esp_err_t lErr = ESP_FAIL;
+
+    s_sMutexBumper = xSemaphoreCreateMutexStatic(&s_sMutexBumperBuffer);
+    if(NULL == s_sMutexBumper) {
+        ESP_LOGE(TAG, "Failed to initialize bumper mutex! Aborting...");
+        goto abort_init;
+    }
 
     s_pEventGroup = xEventGroupCreateStatic(&s_sEventGroupBuffer);
     if(NULL == s_pEventGroup) {
@@ -219,12 +267,12 @@ esp_err_t bumperInit(void) {
         goto abort_init;
     }
 
+    s_startCountdown(5);
+
     lErr = s_createBumperTasks(&s_sBumper);
     if(lErr) {
         goto abort_init;
     }
-
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
 
     if(pdPASS != xTaskCreatePinnedToCore(s_communicationTask,
                                             "tx_loop",
