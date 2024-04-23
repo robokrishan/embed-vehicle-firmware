@@ -6,8 +6,17 @@
 #include "string.h"
 #include "esp_log.h"
 #include "communication.h"
+#include "freertos/event_groups.h"
+
+#define BIT_SENSOR_LEFT     BIT0
+#define BIT_SENSOR_MID      BIT1
+#define BIT_SENSOR_RIGHT    BIT2
 
 static const char* TAG = "bumper";
+
+static EventGroupHandle_t s_pEventGroup = NULL;
+static StaticEventGroup_t s_sEventGroupBuffer;
+static TickType_t s_ulCondition = BIT_SENSOR_LEFT | BIT_SENSOR_MID | BIT_SENSOR_RIGHT;
 
 static Bumper_t s_sBumper;
 static uint8_t* pData;
@@ -60,9 +69,17 @@ static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
 static void s_communicationTask(void* pArg) {
     ESP_LOGI(TAG, "Started communication task");
 
+    EventBits_t bits;
     while(1) {
-        s_sendBumperPacket(&s_sBumper);
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        bits = xEventGroupWaitBits(s_pEventGroup, s_ulCondition, pdTRUE, pdTRUE, portMAX_DELAY);
+        if ((bits & s_ulCondition) == s_ulCondition) {
+            s_sendBumperPacket(&s_sBumper);
+            xEventGroupClearBits(s_pEventGroup, s_ulCondition);
+        } else {
+            ESP_LOGW(TAG, "Timed out waiting for condition! %ld != %ld", bits, s_ulCondition);
+        }
+        
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
 
@@ -111,7 +128,7 @@ static void s_bumperTask(void* pArg) {
         }
         else {
             pModule->ubDistance = (uint8_t)(fDistance*100);
-            printf("[%s] Distance:\t%d\n", pModule->szName, pModule->ubDistance);
+            printf("[%s]\tDistance:\t%d\n", pModule->szName, pModule->ubDistance);
 
 #ifdef DEBUG
             ESP_LOGW(TAG, "%f", fDistance*100);
@@ -133,6 +150,8 @@ static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
                                             1)) {
         ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sMid.szName);
         goto end_create_task;
+    } else {
+        xEventGroupSetBits(s_pEventGroup, BIT_SENSOR_MID);
     }
 
     if(pdPASS != xTaskCreatePinnedToCore(s_bumperTask, 
@@ -144,6 +163,8 @@ static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
                                             1)) {
         ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sLeft.szName);
         goto end_create_task;
+    } else {
+        xEventGroupSetBits(s_pEventGroup, BIT_SENSOR_LEFT);
     }
 
     if(pdPASS != xTaskCreatePinnedToCore(s_bumperTask, 
@@ -155,6 +176,8 @@ static esp_err_t s_createBumperTasks(Bumper_t* pBumper) {
                                             1)) {
         ESP_LOGE(TAG, "Failed to start %s sensor! Aborting...", pBumper->sRight.szName);
         goto end_create_task;
+    } else {
+        xEventGroupSetBits(s_pEventGroup, BIT_SENSOR_RIGHT);
     }
 
     ESP_LOGI(TAG, "Initialized bumper sensor array");
@@ -183,10 +206,16 @@ static esp_err_t s_configureModules(Bumper_t* pBumper) {
 
 esp_err_t bumperInit(void) {
     esp_err_t lErr = ESP_FAIL;
+
+    s_pEventGroup = xEventGroupCreateStatic(&s_sEventGroupBuffer);
+    if(NULL == s_pEventGroup) {
+        ESP_LOGE(TAG, "Failed to create event group! Aborting...");
+        goto abort_init;
+    }
     
     lErr = s_configureModules(&s_sBumper);
     if(lErr) {
-        ESP_LOGE(TAG, "Failed to configure sensor modules! Code: 0x%X", lErr);
+        ESP_LOGE(TAG, "Failed to configure sensor modules! Code: 0x%X. Aborting...", lErr);
         goto abort_init;
     }
 
@@ -204,14 +233,14 @@ esp_err_t bumperInit(void) {
                                             3,
                                             NULL,
                                             0)) {
-        ESP_LOGE(TAG, "Failed to start communication task!");
+        ESP_LOGE(TAG, "Failed to start communication task! Aborting...");
         lErr = ESP_FAIL;
         goto abort_init;
     }
 
     pData = (uint8_t*)malloc((sizeof(uint8_t)*3)+sizeof(s_ulHeader)+sizeof(s_ulTerminator));
     if(NULL == pData) {
-        ESP_LOGE(TAG, "Failed to allocate memory for Tx buffer!");
+        ESP_LOGE(TAG, "Failed to allocate memory for Tx buffer! Aborting...");
         lErr = ESP_ERR_NO_MEM;
         goto abort_init;
     }
