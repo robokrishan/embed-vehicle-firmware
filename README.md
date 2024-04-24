@@ -1,53 +1,62 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-S2 | ESP32-S3 |
-| ----------------- | ----- | -------- | -------- | -------- | -------- |
+# Bumper Sensor Firmware
 
-# Hello World Example
+![Bumper Sensor](repo_data/bumper_sensor.png)
 
-Starts a FreeRTOS task to print "Hello World".
+## Overview
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+Welcome to the Bumper Sensor Firmware repository! This firmware is designed for controlling and reading data from an array of HC-SR04 ultrasonic sensors. It provides an efficient and reliable way to integrate bumper sensors into your IoT projects.
 
-## How to use example
+## Features
 
-Follow detailed instructions provided specifically for this example. 
+- **Multi-Sensor Support**: The firmware supports multiple bumper sensors, allowing you to monitor obstacles from different directions simultaneously.
 
-Select the instructions depending on Espressif chip installed on your development board:
+- **Real-time Data Transmission**: Sensor data is transmitted in real-time to enable quick decision-making in your applications.
 
-- [ESP32 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/stable/get-started/index.html)
-- [ESP32-S2 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s2/get-started/index.html)
+- **Event-based Communication**: The firmware utilizes FreeRTOS event groups for efficient synchronization and communication between tasks.
 
+- **Error Handling**: Comprehensive error handling ensures robust operation even in challenging conditions.
 
-## Example folder contents
+## Getting Started
 
-The project **hello_world** contains one source file in C language [hello_world_main.c](main/hello_world_main.c). The file is located in folder [main](main).
+To get started with the Bumper Sensor Firmware, follow these steps:
 
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt` files that provide set of directives and instructions describing the project's source files and targets (executable, library, or both). 
-
-Below is short explanation of remaining files in the project folder.
+1. **Clone the Repository**: Clone this repository to your local machine using the following command:
 
 ```
-├── CMakeLists.txt
-├── pytest_hello_world.py      Python script used for automated testing
-├── main
-│   ├── CMakeLists.txt
-│   └── hello_world_main.c
-└── README.md                  This is the file you are currently reading
+git clone https://github.com/robokrishan/embed-vehicle-firmware.git
 ```
 
-For more information on structure and contents of ESP-IDF projects, please refer to Section [Build System](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html) of the ESP-IDF Programming Guide.
 
-## Troubleshooting
+2. **Set Up Development Environment**: Set up ESP-IDF v5.0.4 by following the official documentation from Espressif.
 
-* Program upload failure
+3. **Configure Sensor Modules**: Modify the configuration file (`device_config.h`) to specify the GPIO pins for your sensor modules.
 
-    * Hardware connection is not correct: run `idf.py -p PORT monitor`, and reboot your board to see if there are any output logs.
-    * The baud rate for downloading is too high: lower your baud rate in the `menuconfig` menu, and try again.
+4. **Build and Flash Firmware**: Build and flash the firmware using the following command:
 
-## Technical support and feedback
+```
+idf.py build flash
+```
 
-Please use the following feedback channels:
+5. **Monitor Sensor Data**: Once the firmware is running, monitor the sensor data output to ensure proper functionality using the following command:
 
-* For technical queries, go to the [esp32.com](https://esp32.com/) forum
-* For a feature request or bug report, create a [GitHub issue](https://github.com/espressif/esp-idf/issues)
+```
+idf.py monitor
+```
 
-We will get back to you as soon as possible.
+## Contributing
+
+Contributions to the Bumper Sensor Firmware are welcome! If you encounter any issues, have ideas for improvements, or would like to contribute new features, feel free to submit a pull request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgements
+
+- Special thanks to the contributors of the FreeRTOS and ESP-IDF frameworks for providing the foundation for this firmware.
+
+- Inspired by the need for reliable obstacle detection in autonomous robotic systems.
+
+## Contact
+
+For any inquiries or support, please contact [Harit Krishan](mailto:haritkrishan176@gmail.com).
