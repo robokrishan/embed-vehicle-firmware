@@ -1,5 +1,8 @@
 # Changelog
 
+## [1.2.0]
+
+- Removed dedicated UART port, now using main UART port
 
 ## [1.2.0]
 
