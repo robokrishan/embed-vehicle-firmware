@@ -9,11 +9,11 @@
 #include "freertos/event_groups.h"
 #include "freertos/semphr.h"
 
-
 static const char* TAG = "bumper";
 
-// Communication syncrhonization - Event Group Config
+// #define DEBUG 1
 
+// Communication syncrhonization - Event Group Config
 #define BIT_SENSOR_LEFT     BIT0
 #define BIT_SENSOR_MID      BIT1
 #define BIT_SENSOR_RIGHT    BIT2
@@ -37,6 +37,7 @@ static Bumper_t s_sBumper;
 static uint8_t* pData;
 static uint32_t s_ulHeader = COMM_PACKET_HEADER;
 static uint16_t s_ulTerminator = COMM_PACKET_TERMINATOR;
+static char s_szNewlineChar = '\n';
 
 
 // Buffer conversion functions
@@ -65,56 +66,65 @@ static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
 
     size_t packetSize = sizeof(uint32_t) + 3*sizeof(uint8_t) + sizeof(uint16_t);
 
-    if(NULL == pData) {
-        pData = malloc(packetSize);
-        if(NULL == pData) {
-            ESP_LOGE(TAG, "Failed to allocate memory for tx buffer!");
-            lErr =  ESP_ERR_NO_MEM;
-            goto abort_send_packet;
-        }
-        // Serialize header
-        memcpy(&pData[lIterator], s_intToBytes(&s_ulHeader), sizeof(uint32_t));
-        lIterator += sizeof(uint32_t);
-
-        // serialize sensor values
-        memcpy(&pData[lIterator], &s_sBumper.sLeft.ubDistance, sizeof(uint8_t));
-        lIterator += sizeof(uint8_t);
-        memcpy(&pData[lIterator], &s_sBumper.sMid.ubDistance, sizeof(uint8_t));
-        lIterator += sizeof(uint8_t);
-        memcpy(&pData[lIterator], &s_sBumper.sRight.ubDistance, sizeof(uint8_t));
-        lIterator += sizeof(uint8_t);
-
-        // serialize terminator
-        memcpy(&pData[lIterator], s_intToBytesShort(&s_ulTerminator), sizeof(uint16_t));
-        lIterator += sizeof(uint16_t);
-
-#ifdef DEBUG
-        ESP_LOGI(TAG, "Packed %d bytes into buffer!", lIterator);
-        printf("Buffer:\n");
-        for(int i = 0; i < lIterator+1; i++) {
-            printf("%X | %d\n", pData[i], pData[i]);
-        }
-#endif
-        lErr = communicationWrite(pData, packetSize);
-    }
-
-abort_send_packet:
     if(NULL != pData) {
         free(pData);
     }
+
+    pData = malloc(packetSize);
+    if(NULL == pData) {
+        ESP_LOGE(TAG, "Failed to allocate memory for tx buffer!");
+        lErr =  ESP_ERR_NO_MEM;
+        goto abort_send_packet;
+    }
+    // Serialize header
+    memcpy(&pData[lIterator], s_intToBytes(&s_ulHeader), sizeof(uint32_t));
+    lIterator += sizeof(uint32_t);
+
+    // serialize sensor values
+    memcpy(&pData[lIterator], &s_sBumper.sLeft.ubDistance, sizeof(uint8_t));
+    lIterator += sizeof(uint8_t);
+    memcpy(&pData[lIterator], &s_sBumper.sMid.ubDistance, sizeof(uint8_t));
+    lIterator += sizeof(uint8_t);
+    memcpy(&pData[lIterator], &s_sBumper.sRight.ubDistance, sizeof(uint8_t));
+    lIterator += sizeof(uint8_t);
+
+    // serialize terminator
+    memcpy(&pData[lIterator], s_intToBytesShort(&s_ulTerminator), sizeof(uint16_t));
+    lIterator += sizeof(uint16_t);
+
+#ifdef DEBUG
+    ESP_LOGI(TAG, "Packed %d bytes into buffer!", lIterator);
+    printf("Packet:\t[ ");
+    for(int i = 0; i < packetSize; i++) {
+        printf("%02X ", pData[i]);
+    }
+    printf(" ]\t[ ");
+    printf("%d,", s_sBumper.sLeft.ubDistance);
+    printf("%d,", s_sBumper.sMid.ubDistance);
+    printf("%d", s_sBumper.sRight.ubDistance);
+    printf("\n");
+#endif
+    lErr = communicationWrite(pData, packetSize);
+
+abort_send_packet:
+
     xSemaphoreGive(s_sMutexBumper);
     return lErr;
 }
 
 static void s_communicationTask(void* pArg) {
     ESP_LOGI(TAG, "Started communication task");
+    esp_err_t lErr = ESP_FAIL;
 
     EventBits_t bits;
     while(true) {
         bits = xEventGroupWaitBits(s_pEventGroup, s_ulCondition, pdTRUE, pdTRUE, portMAX_DELAY);
         if ((bits & s_ulCondition) == s_ulCondition) {
-            s_sendBumperPacket(&s_sBumper);
-            s_printBumperPacket();
+            lErr = s_sendBumperPacket(&s_sBumper);
+            if(lErr) {
+                ESP_LOGE(TAG, "Failed to send packet! Code: 0x%X", lErr);
+            }
+            // s_printBumperPacket();
             xEventGroupClearBits(s_pEventGroup, s_ulCondition);
         } else {
             ESP_LOGW(TAG, "Timed out waiting for condition! %ld != %ld", bits, s_ulCondition);
@@ -168,6 +178,9 @@ static void s_bumperTask(void* pArg) {
         else {
             // Record value
             pModule->ubDistance = (uint8_t)(fDistance*100);
+            if(pModule->ubDistance > 40) {
+                pModule->ubDistance = 40;
+            }
 
             // Set respective bit
             EventBits_t sBits;
@@ -181,9 +194,9 @@ static void s_bumperTask(void* pArg) {
 
             xEventGroupSetBits(s_pEventGroup, sBits);
 
-#ifdef DEBUG
-            ESP_LOGW(TAG, "%f", fDistance*100);
-#endif
+// #ifdef DEBUG
+//             ESP_LOGW(TAG, "%f", fDistance*100);
+// #endif
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
@@ -281,7 +294,7 @@ esp_err_t bumperInit(void) {
         goto abort_init;
     }
 
-    s_startCountdown(5);
+    s_startCountdown(3);
 
     lErr = s_createBumperTasks(&s_sBumper);
     if(lErr) {
@@ -300,12 +313,8 @@ esp_err_t bumperInit(void) {
         goto abort_init;
     }
 
-    // pData = (uint8_t*)malloc((sizeof(uint8_t)*3)+sizeof(s_ulHeader)+sizeof(s_ulTerminator));
-    // if(NULL == pData) {
-    //     ESP_LOGE(TAG, "Failed to allocate memory for Tx buffer! Aborting...");
-    //     lErr = ESP_ERR_NO_MEM;
-    //     goto abort_init;
-    // }
+    // Initialize buffer pointer
+    pData = NULL;
 
     lErr = ESP_OK;
 abort_init:
