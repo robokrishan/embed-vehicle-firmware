@@ -1,7 +1,7 @@
 #ifndef __DEVICE_CONFIG_H__
 #define __DEVICE_CONFIG_H__
 
-#define CONFIG_DEVICE_FIRMWARE_REV          "1.2.0"
+#define CONFIG_DEVICE_FIRMWARE_REV          "1.3.0"
 
 #define CONFIG_MAX_DISTANCE_CM              200 // 5m max
 
