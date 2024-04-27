@@ -18,6 +18,10 @@ static const char* TAG = "bumper";
 #define BIT_SENSOR_MID      BIT1
 #define BIT_SENSOR_RIGHT    BIT2
 
+#define BUFFER_SIZE                 (1024)
+#define COMM_PACKET_HEADER          (0xAB3412FE)
+#define COMM_PACKET_TERMINATOR      (0x0A0D)
+
 static EventGroupHandle_t s_pEventGroup = NULL;
 static StaticEventGroup_t s_sEventGroupBuffer;
 static TickType_t s_ulCondition = BIT_SENSOR_LEFT | BIT_SENSOR_MID | BIT_SENSOR_RIGHT;
@@ -34,6 +38,8 @@ static uint8_t* pData;
 static uint32_t s_ulHeader = COMM_PACKET_HEADER;
 static uint16_t s_ulTerminator = COMM_PACKET_TERMINATOR;
 
+
+// Buffer conversion functions
 static uint8_t* s_intToBytes(uint32_t* pValue)
 {
     return (uint8_t*) pValue;
@@ -48,16 +54,24 @@ static void s_printBumperPacket(void) {
     printf("[%s]\tDistance:\t%d\n", s_sBumper.sLeft.szName, s_sBumper.sLeft.ubDistance);
     printf("[%s]\tDistance:\t%d\n", s_sBumper.sMid.szName, s_sBumper.sMid.ubDistance);
     printf("[%s]\tDistance:\t%d\n", s_sBumper.sRight.szName, s_sBumper.sRight.ubDistance);
-    printf("=====================================\n");
+    printf("--------------------------------------\n");
 }
 
 static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
+    esp_err_t lErr = ESP_FAIL;
     int lIterator = 0;
-
     // Access Tx buffer
     xSemaphoreTake(s_sMutexBumper, portMAX_DELAY);
 
-    if(NULL != pData) {
+    size_t packetSize = sizeof(uint32_t) + 3*sizeof(uint8_t) + sizeof(uint16_t);
+
+    if(NULL == pData) {
+        pData = malloc(packetSize);
+        if(NULL == pData) {
+            ESP_LOGE(TAG, "Failed to allocate memory for tx buffer!");
+            lErr =  ESP_ERR_NO_MEM;
+            goto abort_send_packet;
+        }
         // Serialize header
         memcpy(&pData[lIterator], s_intToBytes(&s_ulHeader), sizeof(uint32_t));
         lIterator += sizeof(uint32_t);
@@ -70,9 +84,6 @@ static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
         memcpy(&pData[lIterator], &s_sBumper.sRight.ubDistance, sizeof(uint8_t));
         lIterator += sizeof(uint8_t);
 
-        // Return bumper
-        xSemaphoreGive(s_sMutexBumper);
-
         // serialize terminator
         memcpy(&pData[lIterator], s_intToBytesShort(&s_ulTerminator), sizeof(uint16_t));
         lIterator += sizeof(uint16_t);
@@ -84,19 +95,22 @@ static esp_err_t s_sendBumperPacket(Bumper_t* pBumper) {
             printf("%X | %d\n", pData[i], pData[i]);
         }
 #endif
-        xSemaphoreGive(s_sMutexBumper);
-        return communicationWrite(pData, lIterator);
+        lErr = communicationWrite(pData, packetSize);
     }
 
+abort_send_packet:
+    if(NULL != pData) {
+        free(pData);
+    }
     xSemaphoreGive(s_sMutexBumper);
-    return ESP_ERR_TIMEOUT;
+    return lErr;
 }
 
 static void s_communicationTask(void* pArg) {
     ESP_LOGI(TAG, "Started communication task");
 
     EventBits_t bits;
-    while(1) {
+    while(true) {
         bits = xEventGroupWaitBits(s_pEventGroup, s_ulCondition, pdTRUE, pdTRUE, portMAX_DELAY);
         if ((bits & s_ulCondition) == s_ulCondition) {
             s_sendBumperPacket(&s_sBumper);
@@ -286,12 +300,12 @@ esp_err_t bumperInit(void) {
         goto abort_init;
     }
 
-    pData = (uint8_t*)malloc((sizeof(uint8_t)*3)+sizeof(s_ulHeader)+sizeof(s_ulTerminator));
-    if(NULL == pData) {
-        ESP_LOGE(TAG, "Failed to allocate memory for Tx buffer! Aborting...");
-        lErr = ESP_ERR_NO_MEM;
-        goto abort_init;
-    }
+    // pData = (uint8_t*)malloc((sizeof(uint8_t)*3)+sizeof(s_ulHeader)+sizeof(s_ulTerminator));
+    // if(NULL == pData) {
+    //     ESP_LOGE(TAG, "Failed to allocate memory for Tx buffer! Aborting...");
+    //     lErr = ESP_ERR_NO_MEM;
+    //     goto abort_init;
+    // }
 
     lErr = ESP_OK;
 abort_init:

@@ -10,13 +10,18 @@ static const char* TAG = "communication";
 
 
 esp_err_t communicationWrite(uint8_t* pData, size_t ulLen) {
+    esp_err_t lErr = ESP_OK;
     size_t ulWritten = uart_write_bytes(UART_NUM_1, pData, ulLen);
-    if(ulLen == ulWritten) {\
-        return ESP_OK;
-    } else {
+    // if(NULL != pData) {
+    //     free(pData);
+    // }
+
+    if(ulLen != ulWritten) {
         ESP_LOGE(TAG, "Failed to write bytes to UART. Expected: %d | Written: %d", ulLen, ulWritten);
-        return ESP_FAIL;
+        lErr = ESP_FAIL;
     }
+
+    return lErr;
 }
 
 esp_err_t communicationInit(void) {
@@ -26,7 +31,7 @@ esp_err_t communicationInit(void) {
         .baud_rate = 115200,
     };
 
-    lErr = uart_driver_install(UART_NUM_1, BUFFER_SIZE, 0, 0, NULL, 0);
+    lErr = uart_driver_install(UART_NUM_1, 1024, 0, 0, NULL, 0);
     if(lErr) {
         ESP_LOGE(TAG, "Failed to install UART driver! Code: 0x%X", lErr);
         goto abort_init;
